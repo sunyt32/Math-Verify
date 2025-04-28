@@ -147,7 +147,7 @@ def sympy_numeric_eq(
         ):
             return all(
                 sympy_numeric_eq(a_elem, b_elem, float_rounding, numeric_precision)
-                for a_elem, b_elem in zip(a.flat(), b.flat(), strict=False)
+                for a_elem, b_elem in zip(a.flat(), b.flat(), strict=True)
             )
 
     # Ensure this also works for percentage numbers so that 0.333333% = 0.33333333333 with precision 4
@@ -193,6 +193,17 @@ def sympy_symbolic_eq(a: Basic | MatrixBase, b: Basic | MatrixBase) -> bool:
     return False
 
 
+def unwrap_eq(s):
+    if is_assignment_relation(s):
+        return take_last_relation(s).rhs
+    return s
+
+def sort_key(x):
+    try:
+        return default_sort_key(unwrap_eq(x).evalf())
+    except Exception:
+        return default_sort_key(unwrap_eq(x))
+
 def sympy_deep_compare_set_and_tuple(
     gold: SympyFiniteSet | Tuple,
     pred: SympyFiniteSet | Tuple,
@@ -212,17 +223,6 @@ def sympy_deep_compare_set_and_tuple(
     Note: in order to fully support finite sets, we should ideally do kartesian product comparison
     but this is not implemented yet. We kinda hope sympy will order the elements.
     """
-
-    def unwrap_eq(s):
-        if is_assignment_relation(s):
-            return take_last_relation(s).rhs
-        return s
-
-    def sort_key(x):
-        try:
-            return default_sort_key(unwrap_eq(x).evalf())
-        except Exception:
-            return default_sort_key(unwrap_eq(x))
 
     # This ensures it works for {1/3} and {0.333333}
     if len(gold) == len(pred):
@@ -244,7 +244,7 @@ def sympy_deep_compare_set_and_tuple(
 
         return all(
             sympy_expr_eq(a, b, float_rounding, numeric_precision)
-            for a, b in zip(gold_args, pred_args, strict=False)
+            for a, b in zip(gold_args, pred_args, strict=True)
         )
 
     return False
@@ -283,10 +283,10 @@ def sympy_solve_and_compare(
                 g_k == p_k
                 and sympy_expr_eq(g_v, p_v, float_rounding, numeric_precision)
                 for (g_k, g_v), (p_k, p_v) in zip(
-                    sorted(g.items()), sorted(p.items()), strict=False
+                    sorted(g.items()), sorted(p.items()), strict=True
                 )
             )
-            for g, p in zip(sorted(solved_gold), sorted(solved_pred), strict=False)
+            for g, p in zip(ordered(solved_gold, keys=sort_key, default=False), ordered(solved_pred, keys=sort_key, default=False), strict=True)
         )
     else:
         return sympy_expr_eq(
@@ -314,7 +314,7 @@ def sympy_compare_relational(
     if isinstance(gold, And) and isinstance(pred, And):
         return all(
             sympy_compare_relational(g, p, float_rounding, numeric_precision)
-            for g, p in zip(gold._unsorted_args, pred._unsorted_args, strict=False)
+            for g, p in zip(gold._unsorted_args, pred._unsorted_args, strict=True)
         )
 
     elif not isinstance(gold, Relational) or not isinstance(pred, Relational):
@@ -599,6 +599,7 @@ def sympy_expr_eq(
     pred: Basic | MatrixBase,
     float_rounding: int,
     numeric_precision: int,
+    allow_set_relation_comp: bool = False,
     strict: bool = True,
 ) -> bool:
     """Compare two sympy expressions for equality using multiple methods.
@@ -607,6 +608,9 @@ def sympy_expr_eq(
         gold: First sympy expression (expected)
         pred: Second sympy expression (predicted)
         precision: Number of decimal places to compare
+        allow_set_relation_comp: Whether to allow set - relation comparison. Defaults to False.
+            - If True, set - relation comparison will be allowed in all cases.
+            - If False, set - relation comparison will be allowed only if the prediction is a set.
         strict: If true, variables do matter otherwise they don't
 
     Returns:
@@ -620,7 +624,7 @@ def sympy_expr_eq(
             pred_variables = pred.free_symbols
             if len(gold_variables) == len(pred_variables):
                 pred = pred.subs(
-                    list(zip(pred_variables, gold_variables, strict=False))
+                    list(zip(pred_variables, gold_variables, strict=True))
                 )
         except Exception:
             pass
@@ -661,6 +665,12 @@ def sympy_expr_eq(
         # We also unwrap the functions because othewise it creates some conditional set based on the function name
         try:
             gold = unwrap_fcs(gold).as_set()
+        except Exception:
+            pass
+
+    if allow_set_relation_comp and is_relation(pred) and isinstance(gold, Set):
+        try:
+            pred = unwrap_fcs(pred).as_set()
         except Exception:
             pass
 
@@ -734,6 +744,7 @@ def verify(
     float_rounding: int = 6,
     numeric_precision: int = 15,
     strict: bool = True,
+    allow_set_relation_comp: bool = False,
     timeout_seconds: int | None = 5,
 ) -> bool:
     """Verifies if the target expression matches the gold expression using multiple comparison strategies.
@@ -760,6 +771,9 @@ def verify(
             - In non-strict mode: Variables are matched by position and sets can be compared with tuples
         timeout_seconds: Maximum time in seconds to spend on any single comparison operation.
             Defaults to 5 seconds. Any timeout seconds > 0 or not None will result in the function to raise a ValueError if it's called in a threaded environment.
+        allow_set_relation_comp: Whether to allow set - relation comparison. Defaults to False.
+            - If True, set - relation comparison will be allowed in all cases.
+            - If False, set - relation comparison will be allowed only if the prediction is a set.
 
     Returns:
         bool: True if target matches gold according to any of the comparison strategies,
@@ -802,7 +816,7 @@ def verify(
             target, (Basic, MatrixBase)
         ):
             return sympy_expr_eq(
-                gold, target, float_rounding, numeric_precision, strict
+                gold, target, float_rounding, numeric_precision, allow_set_relation_comp, strict
             )
 
         # We don't support str / sympy.Expr comparison. Imo there is no point in doing this, as chances

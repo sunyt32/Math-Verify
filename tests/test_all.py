@@ -38,6 +38,7 @@ def compare_strings(
     match_types: list[str] = ["latex", "expr"],
     precision: int = 6,
     strict: bool = True,
+    allow_set_relation_comp: bool = False,
 ):
     """Helper function to compare strings using the math extraction metrics"""
     # Convert string match_types to ExtractionTarget objects
@@ -50,7 +51,7 @@ def compare_strings(
 
     gold_parsed = parse(gold, extraction_targets)
     pred_parsed = parse(pred, extraction_targets)
-    return verify(gold_parsed, pred_parsed, float_rounding=precision, strict=strict)
+    return verify(gold_parsed, pred_parsed, float_rounding=precision, strict=strict, allow_set_relation_comp=allow_set_relation_comp)
 
 
 @pytest.mark.parametrize(
@@ -456,6 +457,9 @@ def test_latex_notation_math(gold, pred, expected):
         ("$z = 1 + 1 = 2$", "$z = 3+3 = 2$", 1),
         ("$z = 1 + 1 = 2$", "$z = 3+3 = 2$", 1),
         ("$2x+4y-3=0$", "$y=-\\frac{1}{2}x+\\frac{3}{4}$", 1),
+
+        # Equation normalization
+        ("$x^2/4 + y^2/3 = 1$", "$x^2/16 + y^2/12 = 1/4$", 1),
     ],
 )
 def test_relations_math(gold, pred, expected):
@@ -871,3 +875,38 @@ def test_math_extraction_edge_cases(gold, pred, expected):
 )
 def test_math_extraction_additional_cases(gold, pred, expected):
     assert compare_strings(gold, pred, match_types=["latex", "expr"]) == expected
+
+
+@pytest.mark.parametrize(
+    "gold, pred, expected, allow_set_relation_comp",
+    [
+        # No matter the arg, it should always try to compare as set if it's in the pred
+        (
+            r"$-2 \\le x \\le 7$",
+            r"$x \in [-2,7]$",
+            1,
+            True
+        ),
+        (
+            r"$-2 \\le x \\le 7$",
+            r"$x \in [-2,7]$",
+            1,
+            False
+        ),
+        # If it's in gold it should only work if the arg is true
+        (
+            r"$x \in [-2,7]$",
+            r"$-2 \\le x \\le 7$",
+            1,
+            True
+        ),
+        (
+            r"$x \in [-2,7]$",
+            r"$-2 \\le x \\le 7$",
+            0,
+            False
+        ),
+    ]
+)
+def test_set_rel_assymetry(gold, pred, expected, allow_set_relation_comp):
+    assert compare_strings(gold, pred, match_types=["latex"], allow_set_relation_comp=allow_set_relation_comp) == expected
