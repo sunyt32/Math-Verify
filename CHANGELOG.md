@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0]
+### Added
+- Added `raise_on_error` parameter to `verify` and `parse` functions to optionally propagate internal exceptions.
+
+### Changed
+- Reduced default logging verbosity; errors are now logged at debug level unless `raise_on_error` is enabled.
+- Improved handling of `\\boxed{}` expressions, including cases with units/percentages and multiple boxed values.
+
 ## [0.7.0]
 ### Added
 - Added CITATION.cff file with library metadata
