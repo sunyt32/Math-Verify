@@ -1,10 +1,10 @@
 ## Parser definition
 import logging
 from math_verify.errors import TimeoutException
+from typing import Callable, Optional, Sequence
 from math_verify.grader import verify
 from math_verify.parser import ExprExtractionConfig, ExtractionTarget, parse
 from math_verify.utils import timeout
-from typing import Callable, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
