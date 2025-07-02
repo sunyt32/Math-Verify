@@ -170,6 +170,9 @@ def test_latex_notation(gold, pred, expected):
         ("$28\\%$", "$28$ %", 1),
         ("$28\\%$", "$28$ percent", 1),
         ("$28\\%$", "$\\boxed{28}$ pct", 1),
+        ("$28\\%$", "$\\boxed{28 pct}", 1),   # failed
+        ("$28\\%$", "$\\boxed{28 percent}", 1),  # failed
+        ("$28\\%$", "$\\boxed{28 percentage}", 1),  # failed
     ],
 )
 def test_percent_notation(gold, pred, expected):
@@ -925,3 +928,33 @@ def test_set_rel_assymetry(gold, pred, expected, allow_set_relation_comp):
 )
 def test_float_precision(gold, pred, expected):
     assert compare_strings(gold, pred, match_types=["latex", "expr"], precision=5) == expected
+
+
+#https://github.com/huggingface/Math-Verify/issues/41
+@pytest.mark.parametrize(
+    "gold, pred, expected",
+    [
+        (
+            "$4$",
+            "$4\\sqrt{2}$",
+            0
+        )
+    ]
+)
+def test_sqrt_precision(gold, pred, expected):
+    assert compare_strings(gold, pred, match_types=["latex", "expr"], precision=5) == expected
+
+# https://github.com/huggingface/Math-Verify/issues/37
+@pytest.mark.parametrize(
+    "gold, pred, expected",
+    [
+        (
+            "$\text{13}$",
+            "$13$",
+            0
+        )
+    ]
+)
+def test_symbols(gold, pred, expected):
+    assert compare_strings(gold, pred, match_types=["latex", "expr"], precision=5) == expected
+

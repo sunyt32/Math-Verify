@@ -657,6 +657,7 @@ def parse(
     fallback_mode: Literal["no_fallback", "first_match"] = "first_match",
     extraction_mode: Literal["first_match", "any_match"] = "any_match",
     parsing_timeout: int = 5,
+    raise_on_error: bool = False,
 ):
     """Extracts and parses mathematical expressions from a prediction string.
 
@@ -674,6 +675,7 @@ def parse(
             - "first_match": Stop after finding the first match
             - "any_match": Try to extract all possible matches, stops after first sucesful parsing attempt
         parsing_timeout (int, optional): Maximum time in seconds to spend parsing each expression. Defaults to 3. Any timeout seconds > 0 or not None will result in the function to raise a ValueError if it's called in a threaded environment.
+        raise_on_error (bool, optional): Whether to raise an exception if an error occurs during parsing or return an empty list. Defaults to False.
 
     Returns:
         list: List of extracted predictions. Each prediction can be:
@@ -711,11 +713,20 @@ def parse(
             raise ValueError(
                 "Math-Verify 'parse' function doesn't support threaded environment due to usage of signal.alarm() in timeout mechanism. If you need to run in multithreaded environment it's recommended to set the parsing_timeout=None, which will run without timeout (and signal handling). In this case you need to handle the timeouting yourself."
             ) from e
-        logger.exception(f"Error parsing: {pred}")
+        if raise_on_error:
+            raise e from e
+        else:
+            logger.debug(f"Error parsing: {pred}", exc_info=True)
+            return []
+    except Exception as e:
+        if raise_on_error:
+            raise e from e
+        else:
+            logger.debug(f"Error parsing: {pred}", exc_info=True)
         return []
-    except Exception:
-        logger.exception(f"Error parsing: {pred}")
-        return []
-    except TimeoutException:
-        logger.error(f"Timeout during parsing: {pred}")
+    except TimeoutException as e:
+        if raise_on_error:
+            raise TimeoutException(f"Timeout during parsing: {pred}") from e
+        else:
+            logger.warning(f"Timeout during parsing: {pred}")
         return []

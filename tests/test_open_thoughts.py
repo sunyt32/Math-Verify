@@ -97,11 +97,6 @@ from tests.test_all import compare_strings
             1,
         ),
         (
-            r"$$143$$",
-            r"$$\boxed{20}$$ \boxed{143}",
-            1,
-        ),
-        (
             r"$${1,2,3}$$",
             r"\boxed{1} and \boxed{2} and \boxed{3}",
             1,

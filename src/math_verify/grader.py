@@ -331,7 +331,6 @@ def sympy_compare_relational(
         return False
 
     # Same type of relation (e.g. both <= or both >=)
-
     try:
         if type(gold) is type(pred) and sympy_expr_eq(
             gold.lhs - gold.rhs, pred.lhs - pred.rhs, float_rounding, numeric_precision
@@ -346,8 +345,11 @@ def sympy_compare_relational(
     ):
         return True
 
-    if sympy_solve_and_compare(gold, pred, float_rounding, numeric_precision):
-        return True
+    try:
+        if sympy_solve_and_compare(gold, pred, float_rounding, numeric_precision):
+            return True
+    except Exception:
+        pass
 
     return False
 
@@ -489,7 +491,7 @@ def sympy_compare_symbols(gold: Basic | MatrixBase, pred: Basic | MatrixBase) ->
             g_name = g_name.lower()
         return g_name == p_name
 
-    return False
+    return str(gold) == str(pred)
 
 
 def is_relation(expr: Basic | MatrixBase) -> bool:
@@ -746,6 +748,7 @@ def verify(
     strict: bool = True,
     allow_set_relation_comp: bool = False,
     timeout_seconds: int | None = 5,
+    raise_on_error: bool = False,
 ) -> bool:
     """Verifies if the target expression matches the gold expression using multiple comparison strategies.
 
@@ -771,9 +774,10 @@ def verify(
             - In non-strict mode: Variables are matched by position and sets can be compared with tuples
         timeout_seconds: Maximum time in seconds to spend on any single comparison operation.
             Defaults to 5 seconds. Any timeout seconds > 0 or not None will result in the function to raise a ValueError if it's called in a threaded environment.
-        allow_set_relation_comp: Whether to allow set - relation comparison. Defaults to False.
+        allow_set_relation_comp: Whether to allow set - relation (e.g 1 < x < 2 and (1, 2)) comparison. Defaults to False.
             - If True, set - relation comparison will be allowed in all cases.
             - If False, set - relation comparison will be allowed only if the prediction is a set.
+        raise_on_error: Whether to raise an exception if an error occurs during comparison or return False. Defaults to False.
 
     Returns:
         bool: True if target matches gold according to any of the comparison strategies,
@@ -843,15 +847,24 @@ def verify(
                     "Math-Verify doesn't support threaded environment due to usage of signal.alarm() in timeout mechanism. If you need to run in multithreaded environment it's recommended to set the parsing_timeout=None, which will run without timeout (and signal handling). In this case you need to handle the timeouting yourself."
                 ) from e
             else:
-                logger.exception("Error during comparison")
+                if raise_on_error:
+                    raise e from e
+                else:
+                    logger.debug("Error during comparison", exc_info=True)
                 return False
-        except Exception:
+        except Exception as e:
             #! Do not attempt to print out the g and t during handling of exception
             # Because a) it can throw an exception itself and b) it can cause it to be stuck forever during str conversion
-            logger.exception("Error during comparison")
+            if raise_on_error:
+                raise e from e
+            else:
+                logger.debug("Error during comparison", exc_info=True)
             return False
-        except TimeoutException:
-            logger.error("Timeout during comparison")
+        except TimeoutException as e:
+            if raise_on_error:
+                raise TimeoutException("Timeout during comparison") from e
+            else:
+                logger.warning("Timeout during comparison")
             return False
 
     if not isinstance(gold, list):
