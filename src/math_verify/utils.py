@@ -100,7 +100,11 @@ def timeout(timeout_seconds: int | None = 10):  # noqa: C901
                 raise TimeoutException("Operation timed out!")
 
             # If we got here, the process completed in time.
-            success, value = q.get()
+            try:
+                success, value = q.get_nowait()
+            except:
+                raise RuntimeError("Child process exited without returning data")
+
             if success:
                 return value
             else:
