@@ -63,6 +63,7 @@ def timeout(timeout_seconds: int | None = 10):  # noqa: C901
                     return func(*args, **kwargs)
                 finally:
                     # Cancel the alarm and restore previous handler
+                    signal.signal(signal.SIGALRM, signal.SIG_IGN)
                     signal.alarm(0)
                     signal.signal(signal.SIGALRM, old_handler)
 
