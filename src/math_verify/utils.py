@@ -47,70 +47,70 @@ def timeout(timeout_seconds: int | None = 10):  # noqa: C901
 
         return no_timeout_decorator
 
-    # if os.name == "posix":
-    #     # Unix-like approach: signal.alarm
-    #     import signal
+    # if False:
+    if os.name == "posix":
+        # Unix-like approach: signal.alarm
+        import signal
 
-    #     def decorator(func):
-    #         def handler(signum, frame):
-    #             raise TimeoutException("Operation timed out!")
-
-    #         def wrapper(*args, **kwargs):
-    #             old_handler = signal.getsignal(signal.SIGALRM)
-    #             signal.signal(signal.SIGALRM, handler)
-    #             signal.alarm(timeout_seconds)
-    #             try:
-    #                 return func(*args, **kwargs)
-    #             except TimeoutException:
-    #                 # Re-raise the timeout exception
-    #                 raise
-    #             finally:
-    #                 # Cancel the alarm and restore previous handler
-    #                 signal.signal(signal.SIGALRM, signal.SIG_IGN)
-    #                 signal.alarm(0)
-    #                 signal.signal(signal.SIGALRM, old_handler)
-
-    #         return wrapper
-
-    #     return decorator
-
-    # else:
-    # Windows approach: use multiprocessing
-    from torch.multiprocessing import Process, Queue
-
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            q = Queue()
-
-            def run_func(q, args, kwargs):
-                try:
-                    result = func(*args, **kwargs)
-                    q.put((True, result))
-                except Exception as e:
-                    q.put((False, e))
-
-            p = Process(target=run_func, args=(q, args, kwargs))
-            p.start()
-            p.join(timeout_seconds)
-
-            if p.is_alive():
-                # Timeout: Terminate the process
-                p.terminate()
-                p.join()
+        def decorator(func):
+            def handler(signum, frame):
                 raise TimeoutException("Operation timed out!")
 
-            # If we got here, the process completed in time.
-            try:
-                success, value = q.get_nowait()
-            except:
-                raise RuntimeError("Child process exited without returning data")
+            def wrapper(*args, **kwargs):
+                old_handler = signal.getsignal(signal.SIGALRM)
+                signal.signal(signal.SIGALRM, handler)
+                signal.alarm(timeout_seconds)
+                try:
+                    return func(*args, **kwargs)
+                except TimeoutException:
+                    # Re-raise the timeout exception
+                    raise
+                finally:
+                    # Cancel the alarm and restore previous handler
+                    signal.signal(signal.SIGALRM, signal.SIG_IGN)
+                    signal.alarm(0)
+                    signal.signal(signal.SIGALRM, old_handler)
 
-            if success:
-                return value
-            else:
-                # The child raised an exception; re-raise it here
-                raise value
+            return wrapper
 
-        return wrapper
+        return decorator
+
+    else:
+        from multiprocessing import Process, Queue
+
+        def decorator(func):
+            def wrapper(*args, **kwargs):
+                q = Queue()
+
+                def run_func(q, args, kwargs):
+                    try:
+                        result = func(*args, **kwargs)
+                        q.put((True, result))
+                    except Exception as e:
+                        q.put((False, e))
+
+                p = Process(target=run_func, args=(q, args, kwargs))
+                p.start()
+                p.join(timeout_seconds)
+
+                if p.is_alive():
+                    # Timeout: Terminate the process
+                    p.terminate()
+                    p.join()
+                    raise TimeoutException("Operation timed out!")
+
+                # If we got here, the process completed in time.
+                try:
+                    success, value = q.get_nowait()
+                except:
+                    raise RuntimeError("Child process exited without returning data")
+
+                if success:
+                    return value
+                else:
+                    # The child raised an exception; re-raise it here
+                    raise value
+
+            return wrapper
 
     return decorator
